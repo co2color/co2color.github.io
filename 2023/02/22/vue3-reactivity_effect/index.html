@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+
+
+<head>
+    <meta charset="UTF-8">
+    
+    <link rel="apple-touch-icon" sizes="76x76" href="/null">
+    <link rel="icon" type="image/png" href="/img/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+    <title>实现@vue/reactivity的effect函数 - cococolor&#39;s blog</title>
+    
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+    
+    
+    <meta name="description" content="vue3响应式核心">
+    <meta name="author" content="cococolor">
+    <meta name="keywords" content="">
+    <meta property="og:title" content="实现@vue/reactivity的effect函数"/>
+    <style>
+
+
+    
+    :root{
+        --shadow-color: rgba(0,0,0,0.2);
+        --sec-shadow: rgba(0,0,0,0.03);
+        --shadow-hover-color: rgba(0,0,0,0.28);
+        --first-text-color: #475b6d;
+        --second-text-color: #37475b;
+        --third-text-color: #858585;
+        --default-text-color: #505050;
+        --default-link-color: #007bff;
+        --link-color: #000000;
+        --second-link-color: #4F9BFA;
+        --code-color:rgba(27,31,35,.05);
+        --post-bkg-color: #fff;
+        --page-bkg-color: #f2f5f8;
+        --nav-a-hover-color: #3498db;
+        --post-sec-text-color: #718096;
+        --sec-bkg: #f2f5f8;
+        --color-mode: 'light';
+        --bkg-h: rgba(255,255,255,0.6);
+        --bkg-m: #e1e4e8;
+        --home-title-color: #4169E1;
+        --shadow: 0 4px 10px rgba(0,2,4,0.06),0 0 1px rgba(0,2,4,0.11);
+        --hr-color: #ddd;
+        --bg-t: #f4f4f4;
+        --nav-bkg: rgba(255,255,255,0.6);
+    }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-mode: 'dark';
+  }
+
+  :root:not([data-theme]) {
+    --first-text-color: hsla(0,0%,100%,0.92);
+    --second-text-color: hsla(0,0%,100%,0.86);
+    --third-text-color: #a7a9ad;
+    --default-text-color: #505050;
+    --default-link-color: #1589e9;
+    --link-color: #000000;
+    --second-link-color: #30a9de;
+    --post-bkg-color: #252d38;
+    --page-bkg-color: #181c27;
+    --nav-a-hover-color: #3498db;
+    --post-sec-text-color: #a7a9ad;
+    --sec-bkg: #364151;
+    --bkg-h: rgba(255,255,255,0.2);
+    --bkg-m: rgba(255,255,255,0.1);
+    --home-title-color: rgb(226, 82, 90);
+    --code-color:#3e4b5e;
+    --shadow: none;
+    --hr-color: #718096;
+    --bg-t: #364151;
+    --nav-bkg: rgba(13,17,23,0.6);
+  }
+}
+
+[data-theme='dark'] {
+    --shadow-color: rgba(0,0,0,0.2);
+    --shadow-hover-color: rgba(0,0,0,0.28);
+    --first-text-color: hsla(0,0%,100%,0.92);
+    --second-text-color: hsla(0,0%,100%,0.86);
+    --third-text-color: #a7a9ad;
+    --default-text-color: #505050;
+    --default-link-color: #1589e9;
+    --link-color: #000000;
+    --second-link-color: #30a9de;
+    --post-bkg-color: #252d38;
+    --page-bkg-color: #181c27;
+    --nav-a-hover-color: #3498db;
+    --post-sec-text-color: #a7a9ad;
+    --sec-bkg: #364151;
+    --bkg-h: rgba(255,255,255,0.2);
+    --bkg-m: rgba(255,255,255,0.1);
+    --home-title-color: rgb(226, 82, 90);
+    --code-color:#3e4b5e;
+    --shadow: none;
+    --hr-color: #718096;
+    --bg-t: #364151;
+    --nav-bkg: rgba(13,17,23,0.6);
+}
+
+</style>
+
+
+
+<style>
+#page-main,footer,.p-btn{
+    display: none;
+}
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+}
+body {
+    background-color: var(--page-bkg-color);
+    color: var(--second-text-color);
+    overflow-y: scroll;
+    overflow-x: hidden;
+    transition: all .3s;
+}
+a {
+    color: var(--default-link-color);
+    text-decoration: none;
+    background-color: transparent;
+}
+a:hover{
+    color: var(--second-link-color);
+}
+.main-content,.post-card-main{
+    margin: 30px;
+}
+
+
+
+@media (max-width: 410px){
+    .post-card-main{
+        max-width: 350px!important;
+    }
+}
+
+@media (max-width: 980px){
+    .post-card-main{
+        max-width: 520px!important;
+    }
+}
+
+
+@media (min-width: 780px){ 
+    h3{
+        font-size: 1.5rem;
+        line-height: 1.5em;
+    }
+}
+@media (min-width: 1280px){ 
+    h3{
+        font-size: 1.7rem;
+        line-height: 1.5em;
+    }
+}
+@media (min-width: 2096px){ 
+    h3{
+        font-size: 1.8rem;
+        line-height: 1.5em;
+    }
+}
+
+.text-center{
+    text-align: center!important;
+}
+.middle-center{
+    display: -webkit-box;
+    display: -ms-flexbox;
+    display: flex;
+    -webkit-box-align: center;
+    -ms-flex-align: center;
+    align-items: center;
+    -webkit-box-pack: center;
+    -ms-flex-pack: center;
+    justify-content: center;
+    height: 100%;
+}
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: fixed;
+    height: 54px;
+    padding: 0 1.25rem;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    border-bottom: 1px solid var(--bkg-m);
+    background-color: var(--nav-bkg);
+    backdrop-filter: blur(4px);
+    transition: all .3s;
+}
+header .header__left, header .header__right {
+    display: flex;
+    align-items: center;
+    font-family: rubik,sans-serif,Varela Round;
+}
+header .header__left .logo__text {
+    font-size: 18px;
+    font-weight: 450;
+    padding: 14.5px 10px;
+    border-radius: 5px;
+    color: var(--second-text-color);
+}
+header .header__right .navbar__menus {
+    height: 54px;
+    padding: 0 0 0 15px;
+}
+header .header__right .button {
+    color: var(--second-text-color);
+}
+header .header__right .navbar__menus .navbar-menu {
+    display: inline-block;
+    align-items: center;
+    height: 54px;
+    padding: 0 10px;
+    font-size: 16px;
+    line-height: 54px;
+}
+header .header__right .dropdown-icon {
+    display: none;
+    height: 54px;
+    padding: 15px 10px;
+    border: 0;
+    background-color: transparent;
+}
+header .header__right .dropdown-menus {
+    line-height: 2rem;
+    animation: slide-in .15s ease 1;
+    display: none;
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    top: calc(54px + 10px);
+    border-radius: 6px;
+    padding: 24px;
+    background-color: var(--page-bkg-color);
+    border: 1px solid var(--bkg-m);
+    z-index: 9999;
+    justify-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+header .header__right #btn-search, header .header__right #btn-toggle-dark{
+    display: inline-block;
+    padding:  18px 10px;
+    height: 25px;
+}
+header .header__right #btn-dropdown{
+  display: inline-block;
+  padding:  13.5px 0;
+}
+header .header__right .dropdown-menus .dropdown-menu {
+    padding: 10px;
+    color: var(--second-text-color);
+}
+@media screen and (max-width: 764px){
+.navbar__menus {
+    display: none!important;
+}
+.dropdown-icon {
+    display: inline-block!important;
+}
+}
+.p-btn{
+    position: fixed;
+    bottom: 1.2rem;
+    right: 1.2rem;
+    contain: layout;
+}
+.toc-btn,.click-btn{
+    cursor: pointer;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    align-items: center;
+    margin-top: .5rem;
+    font-size: .75rem;
+    background-color: var(--sec-bkg);
+    display: block;
+    padding: 0.9rem;
+    box-shadow: 0 0.3rem 0.6rem rgba(48,55,66,.15);
+    border: none;
+    border-radius: 0.5rem;
+    line-height: 1;
+    color: var(--first-text-color);
+}
+.toc-link{
+    color: var(--second-text-color);
+}
+
+#css-loading h3{
+    font-weight: 500;
+    font-size: 1.4rem;
+    text-align: center;
+    position: fixed;
+    top: 200px;
+    left: 0;
+    right: 0;
+    opacity: 0;
+    animation: cssLoad;
+    animation-delay: 0.3s;
+    -webkit-animation: cssLoad;
+    -webkit-animation-delay: 0.3s;
+}
+@keyframes cssLoad {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 0.9;
+    }
+}
+
+
+.memorial {
+    -webkit-filter: grayscale(100%);
+    -moz-filter: grayscale(100%);
+    -ms-filter: grayscale(100%);
+    -o-filter: grayscale(100%);
+    filter: grayscale(100%);
+    filter:progid:DXImageTransform.Microsoft.BasicImage(grayscale=1); filter:gray;
+}
+
+
+    .post-copyright:after {
+        position: absolute;
+        color: #fff;
+        background: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 496 512'%3E%3Cpath fill='gray' d='M245.8 214.9l-33.2 17.3c-9.4-19.6-25.2-20-27.4-20-22.2 0-33.3 14.6-33.3 43.9 0 23.5 9.2 43.8 33.3 43.8 14.4 0 24.6-7 30.5-21.3l30.6 15.5a73.2 73.2 0 01-65.1 39c-22.6 0-74-10.3-74-77 0-58.7 43-77 72.6-77 30.8-.1 52.7 11.9 66 35.8zm143 0l-32.7 17.3c-9.5-19.8-25.7-20-27.9-20-22.1 0-33.2 14.6-33.2 43.9 0 23.5 9.2 43.8 33.2 43.8 14.5 0 24.7-7 30.5-21.3l31 15.5c-2 3.8-21.3 39-65 39-22.7 0-74-9.9-74-77 0-58.7 43-77 72.6-77C354 179 376 191 389 214.8zM247.7 8C104.7 8 0 123 0 256c0 138.4 113.6 248 247.6 248C377.5 504 496 403 496 256 496 118 389.4 8 247.6 8zm.8 450.8c-112.5 0-203.7-93-203.7-202.8 0-105.5 85.5-203.3 203.8-203.3A201.7 201.7 0 01451.3 256c0 121.7-99.7 202.9-202.9 202.9z'/%3E%3C/svg%3E");
+        content: ' ';
+        height: 10rem;
+        width: 10rem;
+        right: -2rem;
+        top: -2rem;
+        opacity: .1;
+    }
+
+</style>
+
+    
+
+    
+        <!--
+        <link rel="stylesheet" href="/css/page.css" media="print"
+            onload="this.media='all';this.onload=null">
+        <noscript>-->
+            <link rel="stylesheet" href="/css/page.css">
+        <!--</noscript>-->
+    
+    
+    <link rel="stylesheet" href="/css/main.css" media="print" onload="this.media='all';this.onload=null">
+    <noscript>
+        <link rel="stylesheet" href="/css/main.css">
+    </noscript>
+
+    
+    <script src="/js/main.js"></script>
+    
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+    <body>
+        <header>
+            
+<div class="header__left">
+	<a href="/" class="button"><span class="logo__text">cococolor</span></a>
+</div>
+<div class="header__right">
+	<div class="navbar__menus">
+		
+		<a href="/" class="button">
+			<div class="navbar-menu">Home</div>
+		</a>
+		
+		<a href="/archives/" class="button">
+			<div class="navbar-menu">Archives</div>
+		</a>
+		
+		<a href="/categories/" class="button">
+			<div class="navbar-menu">Categories</div>
+		</a>
+		
+		<a href="/tags/" class="button">
+			<div class="navbar-menu">Tags</div>
+		</a>
+		
+		<a target="_blank" rel="noopener" href="https://github.com/co2color" class="button">
+			<div class="navbar-menu">Github</div>
+		</a>
+		
+	</div>
+	
+	<a href="/search/" class="button">
+		<div id="btn-search">
+			<svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 1024 1024" width="24" height="24" fill="currentColor"
+				stroke="currentColor" stroke-width="32">
+				<path
+					d="M192 448c0-141.152 114.848-256 256-256s256 114.848 256 256-114.848 256-256 256-256-114.848-256-256z m710.624 409.376l-206.88-206.88A318.784 318.784 0 0 0 768 448c0-176.736-143.264-320-320-320S128 271.264 128 448s143.264 320 320 320a318.784 318.784 0 0 0 202.496-72.256l206.88 206.88 45.248-45.248z">
+				</path>
+			</svg>
+		</div>
+	</a>
+	
+	<a href="javaScript:void(0);" class="button" id="btn-toggle-dark">
+		<div>
+			<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewbox="0 0 24 24" fill="none"
+				stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+			</svg>
+		</div>
+	</a>
+	<a href="javaScript:void(0);" class="dropdown-icon button">
+		<div id="btn-dropdown">
+			<svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 1024 1024" width="24" height="24" fill="currentColor"
+				stroke="currentColor" stroke-width="32" stroke-linecap="round">
+				<path
+					d="M903.43 561.52H148.8c-13.25 0-24-10.75-24-24s10.75-24 24-24h754.63c13.25 0 24 10.75 24 24s-10.75 24-24 24zM903.43 204.31H148.8c-13.25 0-24-10.75-24-24s10.75-24 24-24h754.63c13.25 0 24 10.75 24 24s-10.75 24-24 24zM903.43 918.73H148.8c-13.25 0-24-10.75-24-24s10.75-24 24-24h754.63c13.25 0 24 10.75 24 24s-10.75 24-24 24z"
+					fill="currentColor"></path>
+			</svg>
+		</div>
+	</a>
+	<div class="dropdown-menus" id="dropdown-menus">
+		
+		<a href="/" class="dropdown-menu button">Home</a>
+		<br>
+		
+		<a href="/archives/" class="dropdown-menu button">Archives</a>
+		<br>
+		
+		<a href="/categories/" class="dropdown-menu button">Categories</a>
+		<br>
+		
+		<a href="/tags/" class="dropdown-menu button">Tags</a>
+		<br>
+		
+		<a target="_blank" rel="noopener" href="https://github.com/co2color" class="dropdown-menu button">Github</a>
+		<br>
+		
+	</div>
+</div>
+
+        </header>
+        <div id="top"></div>
+        <div id="page-main" class="main-content">
+        <div class="mg-top">
+            
+
+<article class="page">
+<div id="post-meta-m">
+    <div class="post-meta" id="post-meta">
+  <h3>实现@vue/reactivity的effect函数</h3>
+    
+      <span class="post-meta-label">
+        cococolor
+      </span>
+    
+    
+      <span class="post-meta-label">
+        <span class="p-dot"></span>
+        <time datetime="2023-02-22 01:09" pubdate>
+          2023-02-22 01:09:09
+        </time>
+      </span>
+    
+    
+      
+      <span class="post-meta">
+        <span class="p-dot"></span>
+        共 1.5k 字
+      </span>
+    
+    
+    
+  </div>
+  
+</div>
+<div class="article-m">
+  <div class="post-toc">
+    
+      <ol class="toc"><li class="toc-item toc-level-4"><a class="toc-link" href="#1-2%EF%BC%9A%E5%88%9B%E5%BB%BAeffect%E5%87%BD%E6%95%B0%EF%BC%8C%E5%88%9B%E5%BB%BAreactiveEffect%E7%B1%BB%EF%BC%8C%E7%84%B6%E5%90%8Enew-reactiveEffect%EF%BC%9A"><span class="toc-number">1.</span> <span class="toc-text">1~2：创建effect函数，创建reactiveEffect类，然后new reactiveEffect：</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#3-new%E5%AE%8C%E5%90%8E%EF%BC%8C%E6%88%91%E4%BB%AC%E9%9C%80%E8%A6%81%E8%AE%A9cb%E7%AB%8B%E9%A9%AC%E6%89%A7%E8%A1%8C%E4%B8%80%E6%AC%A1%E3%80%82%E5%8F%AF%E4%BB%A5%E5%8F%91%E7%8E%B0%EF%BC%8Ceffect%E5%87%BD%E6%95%B0%E7%9A%84%E5%BD%A2%E5%8F%82fn%E8%A2%AB%E8%B5%8B%E5%80%BC%E7%BB%99%E4%BA%86reactiveEffect%E4%B8%AD%E7%9A%84-fn%EF%BC%8C%E5%9B%A0%E6%AD%A4%E6%88%91%E4%BB%AC%E9%9C%80%E8%A6%81%E5%9C%A8reactiveEffect%E4%B8%AD%E5%86%99%E4%B8%80%E4%B8%AApublic%E6%96%B9%E6%B3%95%EF%BC%8C%E8%AF%A5%E6%96%B9%E6%B3%95%E6%89%A7%E8%A1%8Cthis-fn-%EF%BC%8C%E6%88%91%E4%BB%AC%E6%8A%8A%E8%AF%A5%E6%96%B9%E6%B3%95%E5%8F%AB%E5%81%9Arun%EF%BC%9A"><span class="toc-number">2.</span> <span class="toc-text">3.new完后，我们需要让cb立马执行一次。可以发现，effect函数的形参fn被赋值给了reactiveEffect中的_fn，因此我们需要在reactiveEffect中写一个public方法，该方法执行this._fn()，我们把该方法叫做run：</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#4-%E6%94%B6%E9%9B%86-x2F-%E8%A7%A6%E5%8F%91%E4%BE%9D%E8%B5%96%EF%BC%9B"><span class="toc-number">3.</span> <span class="toc-text">4.收集&#x2F;触发依赖；</span></a></li></ol>
+    
+  </div>
+    <div id="article">
+      <div id="post-content" class="markdown-body textretty">
+        <blockquote>
+<p>如果你已经熟练掌握<a target="_blank" rel="noopener" href="https://github.com/vuejs/core/blob/HEAD/packages/reactivity/src/index.ts">vue3 effect</a>的实现，那请不要再继续浪费1秒钟阅读本文章，大神请绕道。<br>阅读本篇文章，你至少需要具备中级JS水平，并了解Vue3 composition Api以及ES6 Proxy的使用，最好还能再了解一点订阅发布这种设计模式。<br>本篇文章仅对effect给出简约实现，去除了实际工程中的很多边界情况。但effect必须配合reactive&#x2F;ref使用，因此会顺便给出这二者的基本响应式实现。</p>
+</blockquote>
+<p>首先来个最终用法：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// reactive和effect都是从该库引入</span></span><br><span class="line"><span class="keyword">const</span> user = <span class="title function_">reactive</span>(&#123; <span class="attr">age</span>: <span class="number">19</span> &#125;)</span><br><span class="line"><span class="comment">// 我们规定effect的cb会先执行</span></span><br><span class="line"><span class="comment">// (不要问为什么会先执行。。你当然也可以写一个自己的effect规定先不执行，触发依赖后再首次执行，这都无所谓，不是重点)</span></span><br><span class="line"><span class="title function_">effect</span>(<span class="function">() =&gt;</span> &#123;</span><br><span class="line">  <span class="variable language_">console</span>.<span class="title function_">log</span>(user.<span class="property">age</span>, <span class="string">&#x27;user.age&#x27;</span>)</span><br><span class="line">&#125;)</span><br><span class="line">user.<span class="property">age</span> = <span class="number">20</span></span><br></pre></td></tr></table></figure>
+<p>首先定义响应式数据user，然后执行effect这个函数，该函数传入一个函数(后面简称函数cb，注意这是callback的简写哈。。)作为参数。接着执行age的赋值。<br>我们都知道vue3中reactive的数据具有响应性，也就是说当你执行<code>user.age = 20</code>时，就会触发响应，重新执行cb()。<br>那么一步步来，我们先不关注reactive，只看effect，当你执行effect()这个函数时，发生了什么？</p>
+<ol>
+<li>创建effect函数；</li>
+<li>effect函数里面new了一个Effect；</li>
+<li>new完后，cb会执行一次；</li>
+<li>cb执行过程中，收集cb函数语句的依赖，这里发现收集到了user.age这个依赖（人话：后续user.age改变时，用某种方式让cb再次执行）</li>
+</ol>
+<h4 id="1-2：创建effect函数，创建reactiveEffect类，然后new-reactiveEffect："><a href="#1-2：创建effect函数，创建reactiveEffect类，然后new-reactiveEffect：" class="headerlink" title="1~2：创建effect函数，创建reactiveEffect类，然后new reactiveEffect："></a>1~2：创建effect函数，创建reactiveEffect类，然后new reactiveEffect：</h4><figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">reactiveEffect</span> &#123;</span><br><span class="line">  deps = [] <span class="comment">// 收集依赖到该数组，因为依赖不一定只有一个(上面代码就user.age一个，因此这种情况deps.length = 1)</span></span><br><span class="line">  <span class="title function_">constructor</span>(<span class="params">fn, scheduler?: <span class="built_in">Function</span></span>) &#123;</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">_fn</span> = fn</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">scheduler</span> = scheduler</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">function</span> <span class="title function_">effect</span>(<span class="params">fn</span>) &#123;</span><br><span class="line">  <span class="keyword">const</span> eff = <span class="keyword">new</span> <span class="title function_">reactiveEffect</span>(fn)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="3-new完后，我们需要让cb立马执行一次。可以发现，effect函数的形参fn被赋值给了reactiveEffect中的-fn，因此我们需要在reactiveEffect中写一个public方法，该方法执行this-fn-，我们把该方法叫做run："><a href="#3-new完后，我们需要让cb立马执行一次。可以发现，effect函数的形参fn被赋值给了reactiveEffect中的-fn，因此我们需要在reactiveEffect中写一个public方法，该方法执行this-fn-，我们把该方法叫做run：" class="headerlink" title="3.new完后，我们需要让cb立马执行一次。可以发现，effect函数的形参fn被赋值给了reactiveEffect中的_fn，因此我们需要在reactiveEffect中写一个public方法，该方法执行this._fn()，我们把该方法叫做run："></a>3.new完后，我们需要让cb立马执行一次。可以发现，effect函数的形参fn被赋值给了reactiveEffect中的_fn，因此我们需要在reactiveEffect中写一个public方法，该方法执行this._fn()，我们把该方法叫做run：</h4><figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">reactiveEffect</span> &#123;</span><br><span class="line">  deps = [] <span class="comment">// 收集依赖到该数组，因为依赖不一定只有一个(上面代码就user.age一个，因此这种情况deps.length = 1)</span></span><br><span class="line">  <span class="title function_">constructor</span>(<span class="params">fn, scheduler?: <span class="built_in">Function</span></span>) &#123;</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">_fn</span> = fn</span><br><span class="line">    <span class="variable language_">this</span>.<span class="property">scheduler</span> = scheduler</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="title function_">run</span>(<span class="params"></span>) &#123;</span><br><span class="line">    <span class="variable language_">this</span>.<span class="title function_">_fn</span>()</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>然后在effect函数中调用：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">effect</span>(<span class="params">fn</span>) &#123;</span><br><span class="line">  <span class="keyword">const</span> eff = <span class="keyword">new</span> <span class="title function_">reactiveEffect</span>(fn)</span><br><span class="line">  eff.<span class="title function_">run</span>()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>至此，effect的cb会立即执行一次。</p>
+<h4 id="4-收集-x2F-触发依赖；"><a href="#4-收集-x2F-触发依赖；" class="headerlink" title="4.收集&#x2F;触发依赖；"></a>4.收集&#x2F;触发依赖；</h4><p>这里需要简单讲一下reactive。<br>你首先肯定要写一个reactive函数，这个函数返回一个Proxy: </p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">reactive</span>(<span class="params">raw</span>) &#123;</span><br><span class="line">  <span class="keyword">return</span> <span class="keyword">new</span> <span class="title class_">Proxy</span>(raw, &#123;</span><br><span class="line">    <span class="comment">// todo: get and set</span></span><br><span class="line">  &#125;)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>那么这里最重要的就是todo里面的内容了。<br>我们在实际使用时，比如<code>const person = reactive(&#123; age: 1 &#125;)</code>，然后调用obj.age，此时就应该触发get，那么我们来实现get：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">createGetter</span>(<span class="params"></span>) &#123;</span><br><span class="line">  <span class="keyword">return</span> <span class="keyword">function</span> <span class="title function_">get</span>(<span class="params">target, key</span>) &#123;</span><br><span class="line">    <span class="keyword">const</span> res = <span class="title class_">Reflect</span>.<span class="title function_">get</span>(target, key)</span><br><span class="line">    <span class="comment">// todo</span></span><br><span class="line">    <span class="comment">// track(target, key)</span></span><br><span class="line">    <span class="keyword">return</span> res</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">function</span> <span class="title function_">reactive</span>(<span class="params">raw</span>) &#123;</span><br><span class="line">  <span class="keyword">return</span> <span class="keyword">new</span> <span class="title class_">Proxy</span>(raw, &#123;</span><br><span class="line">    <span class="comment">// todo: get and set</span></span><br><span class="line">    <span class="attr">get</span>: <span class="title function_">createGetter</span>()</span><br><span class="line">  &#125;)</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>此时调用obj.age，就会触发这个get，返回res给obj.age。但是呢为了实现响应性，让effect的cb被触发，我们需要实现这个track函数，该函数应该放在effect模块中实现，在reactive中引入effect模块的track函数：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// effect.ts</span></span><br><span class="line"><span class="keyword">let</span> activeEffect = <span class="literal">null</span> <span class="comment">// 存reactiveEffect，此段代码先忽略，下面一段代码实现该变量</span></span><br><span class="line"><span class="keyword">const</span> targetMap = <span class="keyword">new</span> <span class="title class_">Map</span>() <span class="comment">// 存target</span></span><br><span class="line"><span class="keyword">export</span> <span class="keyword">function</span> <span class="title function_">track</span>(<span class="params">target, key</span>) &#123;</span><br><span class="line">  <span class="comment">// target-&gt;key-&gt;dep</span></span><br><span class="line">  <span class="comment">// 1.存target</span></span><br><span class="line">  <span class="comment">// 2.存key</span></span><br><span class="line">  <span class="keyword">let</span> depsMap = targetMap.<span class="title function_">get</span>(target)</span><br><span class="line">  <span class="keyword">if</span> (!depsMap) &#123;</span><br><span class="line">    depsMap = <span class="keyword">new</span> <span class="title class_">Map</span>() <span class="comment">// 存key</span></span><br><span class="line">    targetMap.<span class="title function_">set</span>(target, depsMap)</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">let</span> dep = depsMap.<span class="title function_">get</span>(key)</span><br><span class="line">  <span class="keyword">if</span> (!dep) &#123;</span><br><span class="line">    dep = <span class="keyword">new</span> <span class="title class_">Set</span>()</span><br><span class="line">    depsMap.<span class="title function_">set</span>(key, dep)</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">if</span> (!dep.<span class="title function_">has</span>(activeEffect)) &#123;</span><br><span class="line">    dep.<span class="title function_">add</span>(activeEffect)</span><br><span class="line">    activeEffect.<span class="property">deps</span>.<span class="title function_">push</span>(dep)</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>可以发现里面有activeEffect，这是effect模块中的全局变量，在外层定义。在reactiveEffect的run函数中，我们对它进行赋值：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="title function_">run</span>(<span class="params"></span>) &#123;</span><br><span class="line">activeEffect = <span class="variable language_">this</span> <span class="comment">// 赋值</span></span><br><span class="line"><span class="keyword">const</span> result = <span class="variable language_">this</span>.<span class="title function_">_fn</span>()</span><br><span class="line">activeEffect = <span class="literal">undefined</span></span><br><span class="line"><span class="keyword">return</span> result</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这段可能不太好理解，我来点通俗易懂的解释：<br>执行this._fn()的时候，视角就应该跑去这个_fn的内部，如果这个_fn内部有Proxy.get&#x2F;set被触发，就会track&#x2F;trigger；<br>而如若执行get导致执行track，那么track里面的activeEffect是被赋值给了this的，于是就会执行后面的dep.add(activeEffect)。可能你已经猜到了，这么做就是为了存储activeEffect到dep中，以便后续set的时候执行dep_item.run()，dep数组的每个item都是一个reactiveEffect实例，拥有run方法，因此dep_item.run()就会执行effect中的cb。<br>那么来实现set：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">createSetter</span>(<span class="params"></span>) &#123;</span><br><span class="line">  <span class="keyword">return</span> <span class="keyword">function</span> <span class="title function_">set</span>(<span class="params">target, key, value</span>) &#123;</span><br><span class="line">    <span class="keyword">const</span> res = <span class="title class_">Reflect</span>.<span class="title function_">set</span>(target, key, value)</span><br><span class="line">    <span class="comment">// todo</span></span><br><span class="line">    <span class="comment">// trigger(target, key)</span></span><br><span class="line">    <span class="keyword">return</span> res</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">function</span> <span class="title function_">reactive</span>(<span class="params">raw</span>) &#123;</span><br><span class="line">  <span class="keyword">return</span> <span class="keyword">new</span> <span class="title class_">Proxy</span>(raw, &#123;</span><br><span class="line">    <span class="comment">// todo: get and set</span></span><br><span class="line">    <span class="attr">get</span>: <span class="title function_">createGetter</span>(),</span><br><span class="line">    <span class="attr">set</span>: <span class="title function_">createSetter</span>()</span><br><span class="line">  &#125;)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>相应的，我们来实现trigger，trigger会执行effect的cb：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">export</span> <span class="keyword">function</span> <span class="title function_">trigger</span>(<span class="params">target, key</span>) &#123;</span><br><span class="line">  <span class="comment">// 1.找到target</span></span><br><span class="line">  <span class="comment">// 2.找到key</span></span><br><span class="line">  <span class="comment">// 3.找到dep</span></span><br><span class="line">  <span class="comment">// 4.执行dep</span></span><br><span class="line">  <span class="keyword">const</span> depsMap = targetMap.<span class="title function_">get</span>(target)</span><br><span class="line">  <span class="keyword">const</span> dep = depsMap.<span class="title function_">get</span>(key)</span><br><span class="line">  <span class="title function_">triggerEffects</span>(dep)</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">export</span> <span class="keyword">function</span> <span class="title function_">triggerEffects</span>(<span class="params">dep</span>) &#123;</span><br><span class="line">  <span class="comment">// 执行收集到的所有的 effect 的 run 方法</span></span><br><span class="line">  <span class="keyword">for</span> (<span class="keyword">const</span> effect <span class="keyword">of</span> dep) &#123;</span><br><span class="line">    effect.<span class="title function_">run</span>()</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>找到dep，然后执行所有dep的item(即effect)即可。</p>
+<p>用demo总结：<br>对于这段代码：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> user = <span class="title function_">reactive</span>(&#123; <span class="attr">age</span>: <span class="number">19</span> &#125;)</span><br><span class="line"><span class="keyword">let</span> double</span><br><span class="line"><span class="title function_">effect</span>(<span class="function">() =&gt;</span> &#123;</span><br><span class="line">  <span class="variable language_">console</span>.<span class="title function_">log</span>(user.<span class="property">age</span>, <span class="string">&#x27;user.age&#x27;</span>)</span><br><span class="line">&#125;)</span><br><span class="line">user.<span class="property">age</span> = <span class="number">20</span></span><br></pre></td></tr></table></figure>
+<p>我的理解：<br>1.首先执行effect()这个函数<br>2.eff.run()执行上面effect()括号内的callback，<br>  此时currentEffect就被赋值给了这个callback，<br>  后面set的时候再触发该callback，<br>  相当于又执行了effect()括号内的callback<br> 3.执行callback的时候发现user.age被访问(被proxy劫持，触发get)了，于是执行track()<br> 4.执行track()的时候发现currentEffect存在，<br>   于是dep.add，即把callback添加到dep中，用于后面的trigger执行该callback<br>5. 执行user.age &#x3D; 20的时候，触发set，于是执行trigger()<br>6. 执行trigger()的时候，遍历dep，执行dep中的callback，即effect()括号内的callback，最终实现了类似vue的响应性</p>
+<hr>
+<p>完整代码：<a target="_blank" rel="noopener" href="https://github.com/co2color/easy-vue3/blob/main/src/reactivity/effect.ts">https://github.com/co2color/easy-vue3/blob/main/src/reactivity/effect.ts</a></p>
+
+      </div>
+    </div>
+</div>
+
+<div class="post-category">
+
+    <div id="p-meta-i">
+        
+              
+                <a class="hover-with-bg" href="/categories/%E5%89%8D%E7%AB%AF/">前端</a>
+              
+          
+          
+              
+                <a class="hover-with-bg" href="/tags/%E6%BA%90%E7%A0%81/"># 源码</a>
+              
+          
+    </div>
+</div>
+
+
+<div class="post-footer">
+  
+
+</article>
+
+
+        </div>
+        
+<footer class="text-center">
+    
+    
+    
+    
+    
+    
+    
+</footer>
+
+<div class="p-btn">
+    
+        <a class="toc-btn" id="toc-btn"><i id="i-menu"></i></a>
+    
+    
+      <a class="toc-btn" id="share-btn"><i>
+        <svg t="1670124379155" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="2683" width="25" height="25"><path d="M395.946667 234.666667v64H256v469.333333h512V522.666667h64V768a64 64 0 0 1-64 64H256a64 64 0 0 1-64-64V298.666667a64 64 0 0 1 64-64h139.946667z m335.850666-87.914667l150.848 150.826667-158.378666 158.4-45.269334-45.248L748.394667 341.333333H672c-121.685333 0-220.714667 97.024-223.914667 217.941334L448 565.333333v85.333334h-64v-85.333334C384 406.272 512.938667 277.333333 672 277.333333h99.861333l-85.312-85.333333 45.248-45.248z" p-id="2684" fill="var(--first-text-color)"></path></svg>
+      </i></a>
+    
+    <a href="javascript:window.scrollTo({top:0,behavior:'smooth'});" class="click-btn">
+      <i id="i-up"></i>
+    </a>
+</div>
+
+<!-- SCRIPTS -->
+
+
+
+
+
+
+<script>
+    document.getElementById("btn-dropdown").addEventListener('click', () => {
+      toggleClass("#dropdown-menus","display-inline");
+    });
+    console.log('\n' + ' %c Powered by Hexo Theme Miracle ' + ' %c https://github.com/hifun-team/hexo-theme-miracle ' + '\n' + '\n', 'color: #fff; background: #4F9BFA; padding:5px 0;', 'background: #FFF; padding:5px 0;');
+
+    
+
+    
+  /* 小彩蛋: 饮茶先啦 */
+  setTimeout(() => {
+    var time = new Date();
+    if (time.getHours() == 15) {
+      let comment = document.createComment(' 三点几嚟！饮茶先啦！ ');
+      document.body.insertBefore(comment, document.getElementsByTagName('header')[0]);
+    }
+  },1);
+    
+</script>
+
+
+<script>
+    var postImg = document.querySelectorAll("article[class=page] img");
+    for (let imgi = 0; imgi < postImg.length; imgi++) {
+        postImg[imgi].onclick = () => {
+            let zoomImg = document.createElement("div");
+            zoomImg.id = "zoomImg";
+            zoomImg.innerHTML = `<div id="zoom-picture"></div>
+    <div class="poptrox-overlay"
+        style="position: fixed; left: 0px; top: 0px; z-index: 20000; width: 100%; height: 100%; text-align: center; cursor: zoom-out; opacity: 1;">
+        <div style="display:inline-block;height:100%;vertical-align:middle;"></div>
+        <div
+            style="position:absolute;left:0;top:0;width:100%;height:100%;background:#000000;opacity:0;filter:alpha(opacity=0);">
+        </div>
+        <div class="poptrox-popup"
+            style="display: inline-block; vertical-align: middle; position: relative; z-index: 1; cursor: zoom-out; min-width: 10px; min-height: 10px; width: auto; height: auto;">
+            <div class="loader" style="display: none;"></div>
+            <div class="pic" style="text-indent: 0px;"><img
+                    src="${ postImg[imgi].srcset || postImg[imgi].src }" alt="Loading..."
+                    style="vertical-align: bottom; max-width: 85vw; max-height: 85vh;"></div>
+        </div>
+    </div>`;
+            document.body.appendChild(zoomImg);
+                document.querySelector("#zoomImg").onclick = () => {
+                    document.querySelector("#zoomImg").remove();
+                }
+        }
+    }
+    
+</script>
+
+
+
+
+    <script>
+        query("#toc-btn")[0].onclick = () => {
+            if (query(".post-toc")[0].innerHTML) {
+                toggleClass(".post-toc", "display-inline");
+            }
+        }
+
+        if (!query(".post-toc")[0].innerHTML) {
+            addClass("#toc-btn","display-none");
+        }
+    </script>
+
+
+
+    <script>
+        query("#share-btn")[0].onclick = async () => {
+            let url = `${location.protocol}//${location.hostname}${location.port ? ":"+location.port:location.port}${location.pathname}#read=${sessionStorage.getItem(location.pathname+"_read_y") || ""}`;
+            try {
+                await navigator.clipboard.writeText(url);
+                prompt_core("分享链接已经复制至剪贴板", 4800, true);
+            } catch(e) {
+                prompt_core("分享链接复制失败，请手动复制<br/>"+url, 4800, false);
+            }
+        }
+    </script>
+
+
+
+
+
+
+
+    <script>
+        const getScrollPosition = (el = window) => ({
+            x: el.pageXOffset !== undefined ? el.pageXOffset : el.scrollLeft,
+            y: el.pageYOffset !== undefined ? el.pageYOffset : el.scrollTop
+        });
+        // 此处的 750 是「页面元素的最大宽度」
+        var wx = document.getElementsByClassName("article-m")[0].clientWidth;
+        var wy = document.getElementsByClassName("article-m")[0].clientHeight;
+        function windowScroll() {
+            // 反复修改 确保页面尺寸不改变
+            wx = document.getElementsByClassName("article-m")[0].clientWidth;
+            wy = document.getElementsByClassName("article-m")[0].clientHeight;
+            let y = Math.round(getScrollPosition().y);
+            // console.log(y);
+            // 组合字符串，同时记录页面坐标，页面宽度和高度
+            let p = `${y}:${wx}:${wy}`;
+            // 写入到 sessionStorage 中
+            sessionStorage.setItem(location.pathname + "_read_y", p);
+        }
+        // URL 中是否包含传递的坐标信息
+        setTimeout(() => {
+            if (location.hash.split("#read=").length > 1) {
+                // prompt_core("已有阅读进度，正在跳转", 4800, true);
+                // 分离字符串
+                let read_y = location.hash.split("#read=")[1];
+                read_y = read_y.split(":");
+                // 组合乘积，顺滑移动至坐标
+                window.scrollTo({top: Math.round(Number(read_y[0]) * Number(read_y[1] * Number(read_y[2] / wx / wy))), behavior: "smooth"});
+            } else {
+                // 从 sessionStorage 中获取
+                let read_y = sessionStorage.getItem(location.pathname + "_read_y") || "0:0:0";
+                read_y = read_y.split(":");
+                // if (read_y[0] != "0") prompt_core("已有阅读进度，正在跳转", 4800, true);
+                // window.scrollTo({top: Math.round(Number(read_y[0]) * Number(read_y[1] * Number(read_y[2] / wx / wy))), behavior: "smooth"});
+            }
+        }, 500);
+        window.onscroll = windowScroll;
+    </script>
+
+
+
+
+
+        </div>
+        <div id="css-loading">
+            <h3 class="text-center">加载中...</h3>
+        </div>
+        
+    </body>
+</html>
